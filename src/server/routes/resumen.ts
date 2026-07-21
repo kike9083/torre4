@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import db from '../database.js'
 import { resumenSchema } from '../schemas.js'
+import { cascadeRecalculate } from '../lib/cascade.js'
 
 const router = Router()
 
@@ -31,6 +32,12 @@ router.post('/', (req, res) => {
      VALUES (?, ?, ?)`
   )
   stmt.run(fecha, banco_saldo_anterior, caja_saldo_anterior)
+  
+  const d = new Date(fecha)
+  const month = d.getMonth() + 1
+  const year = d.getFullYear()
+  cascadeRecalculate(month, year)
+  
   res.json({ success: true })
 })
 
@@ -50,6 +57,9 @@ router.delete('/month/:month/:year', (req, res) => {
     db.prepare(`DELETE FROM resumen_mensual WHERE fecha = ?`).run(startDate)
   })
   deleteAll()
+  
+  cascadeRecalculate(endMonth, endYear)
+  
   res.json({ success: true })
 })
 

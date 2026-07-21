@@ -10,7 +10,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "db:seed": "tsx src/server/scripts/seed.ts",
-    "import:mysql": "tsx src/server/scripts/import-mysql.ts"
+    "import:mysql": "tsx src/server/scripts/import-mysql.ts",
+    "recalculate": "tsx src/server/scripts/recalculate.ts"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.10",

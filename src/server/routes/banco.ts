@@ -1,8 +1,14 @@
 import { Router } from 'express'
 import db from '../database.js'
 import { movimientoSchema } from '../schemas.js'
+import { cascadeRecalculate } from '../lib/cascade.js'
 
 const router = Router()
+
+function extractMonthYear(fecha: string): { month: number; year: number } {
+  const d = new Date(fecha)
+  return { month: d.getMonth() + 1, year: d.getFullYear() }
+}
 
 router.get('/', (req, res) => {
   const { month, year } = req.query
@@ -25,6 +31,10 @@ router.post('/', (req, res) => {
     `INSERT INTO banco_movimientos (descripcion, monto, fecha) VALUES (?, ?, ?)`
   )
   const info = stmt.run(descripcion, monto, fecha)
+  
+  const { month, year } = extractMonthYear(fecha)
+  cascadeRecalculate(month, year)
+  
   res.json({ id: info.lastInsertRowid })
 })
 
@@ -39,12 +49,23 @@ router.put('/:id', (req, res) => {
     `UPDATE banco_movimientos SET descripcion=?, monto=?, fecha=? WHERE id=?`
   )
   stmt.run(descripcion, monto, fecha, id)
+  
+  const { month, year } = extractMonthYear(fecha)
+  cascadeRecalculate(month, year)
+  
   res.json({ success: true })
 })
 
 router.delete('/:id', (req, res) => {
   const { id } = req.params
+  const row = db.prepare('SELECT fecha FROM banco_movimientos WHERE id=?').get(id) as any
   db.prepare('DELETE FROM banco_movimientos WHERE id=?').run(id)
+  
+  if (row) {
+    const { month, year } = extractMonthYear(row.fecha)
+    cascadeRecalculate(month, year)
+  }
+  
   res.json({ success: true })
 })
 

@@ -7,6 +7,7 @@ import bancoRouter from './routes/banco.js'
 import cajaRouter from './routes/caja.js'
 import resumenRouter from './routes/resumen.js'
 import allRouter from './routes/all.js'
+import recalculateRouter from './routes/recalculate.js'
 
 initDatabase()
 
@@ -22,6 +23,7 @@ app.use('/api/gastos', gastosRouter)
 app.use('/api/banco', bancoRouter)
 app.use('/api/caja', cajaRouter)
 app.use('/api/resumen', resumenRouter)
+app.use('/api/recalculate', recalculateRouter)
 
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`)
