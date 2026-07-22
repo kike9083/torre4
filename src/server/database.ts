@@ -10,6 +10,33 @@ const db = new Database(dbPath)
 db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
 
+function fixDataConsistency() {
+  const inconsistentes = db.prepare(`
+    SELECT id, apartamento, nombre 
+    FROM ingresos 
+    WHERE apartamento NOT GLOB '[0-9]*'
+  `).all() as any[]
+
+  if (inconsistentes.length === 0) return
+
+  console.log(`[fix] Detectados ${inconsistentes.length} registros con apartamento/nombre invertidos, corrigiendo...`)
+
+  const updateStmt = db.prepare(`
+    UPDATE ingresos 
+    SET apartamento = ?, nombre = ?
+    WHERE id = ?
+  `)
+
+  const updateMany = db.transaction((registros: any[]) => {
+    for (const r of registros) {
+      updateStmt.run(r.nombre, r.apartamento, r.id)
+    }
+  })
+
+  updateMany(inconsistentes)
+  console.log(`[fix] ${inconsistentes.length} registros corregidos exitosamente`)
+}
+
 export function initDatabase() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS ingresos (
@@ -58,6 +85,8 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_banco_fecha ON banco_movimientos(fecha);
     CREATE INDEX IF NOT EXISTS idx_caja_fecha ON caja_movimientos(fecha);
   `)
+
+  fixDataConsistency()
 }
 
 export default db
