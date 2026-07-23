@@ -8,6 +8,7 @@ import cajaRouter from './routes/caja.js'
 import resumenRouter from './routes/resumen.js'
 import allRouter from './routes/all.js'
 import recalculateRouter from './routes/recalculate.js'
+import libroContableRouter from './routes/libro-contable.js'
 
 initDatabase()
 
@@ -24,6 +25,7 @@ app.use('/api/banco', bancoRouter)
 app.use('/api/caja', cajaRouter)
 app.use('/api/resumen', resumenRouter)
 app.use('/api/recalculate', recalculateRouter)
+app.use('/api/libro-contable', libroContableRouter)
 
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`)

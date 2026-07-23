@@ -7,10 +7,11 @@ import { IngresosTab } from './components/IngresosTab'
 import { GastosTab } from './components/GastosTab'
 import { BancoTab } from './components/BancoTab'
 import { CajaTab } from './components/CajaTab'
+import { LibroContableTab } from './components/LibroContableTab'
 import { Modal } from './components/Modal'
-import { LayoutDashboard, Users, Receipt, Building2, Wallet } from 'lucide-react'
+import { LayoutDashboard, Users, Receipt, Building2, Wallet, BookOpen } from 'lucide-react'
 
-type Tab = 'dashboard' | 'ingresos' | 'gastos' | 'banco' | 'caja'
+type Tab = 'dashboard' | 'ingresos' | 'gastos' | 'banco' | 'caja' | 'libro-contable'
 
 export default function App() {
   const { month, year, setMonth, setYear, fetchData } = useStore()
@@ -27,6 +28,7 @@ export default function App() {
     { id: 'gastos' as Tab, label: 'Gastos', icon: Receipt },
     { id: 'banco' as Tab, label: 'Banco', icon: Building2 },
     { id: 'caja' as Tab, label: 'Caja', icon: Wallet },
+    { id: 'libro-contable' as Tab, label: 'Libro Contable', icon: BookOpen },
   ]
 
   if (loading) {
@@ -119,6 +121,7 @@ export default function App() {
           {activeTab === 'gastos' && <GastosTab />}
           {activeTab === 'banco' && <BancoTab />}
           {activeTab === 'caja' && <CajaTab />}
+          {activeTab === 'libro-contable' && <LibroContableTab />}
         </div>
       </div>
 
