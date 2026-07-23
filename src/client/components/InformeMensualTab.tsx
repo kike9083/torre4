@@ -1,11 +1,10 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useStore } from '../store'
 import { FileDown, Loader2 } from 'lucide-react'
-import html2canvas from 'html2canvas'
-import jsPDF from 'jspdf'
+import { jsPDF } from 'jspdf'
+import { autoTable } from 'jspdf-autotable'
 
 export function InformeMensualTab() {
-  const reportRef = useRef<HTMLDivElement>(null)
   const [exporting, setExporting] = useState(false)
   const { ingresos, gastos, bancoMovimientos, cajaMovimientos, resumen, month, year } = useStore()
 
@@ -26,35 +25,238 @@ export function InformeMensualTab() {
   const fmt = (v: number) => v.toFixed(2)
   const monthName = new Date(year, month - 1).toLocaleDateString('es', { month: 'long', year: 'numeric' })
 
-  const handleExportPDF = async () => {
-    if (!reportRef.current) return
+  const handleExportPDF = () => {
     setExporting(true)
 
     try {
-      const el = reportRef.current
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false
-      })
-
-      const imgData = canvas.toDataURL('image/png')
       const pdf = new jsPDF('p', 'mm', 'a4')
-      const pdfW = pdf.internal.pageSize.getWidth()
-      const pdfH = pdf.internal.pageSize.getHeight()
+      const pw = pdf.internal.pageSize.getWidth()
+      const ml = 14
+      const mr = 14
+      const cw = pw - ml - mr
 
-      const imgW = canvas.width
-      const imgH = canvas.height
-      const ratio = imgW / pdfW
-      const totalPages = Math.ceil(imgH / ratio / pdfH)
+      let y = 18
 
-      for (let page = 0; page < totalPages; page++) {
-        if (page > 0) pdf.addPage()
-        const srcY = page * pdfH * ratio
-        const srcH = Math.min(pdfH * ratio, imgH - srcY)
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfW, srcH / ratio, undefined, 'FAST')
+      const title = (text: string, color: number[]) => {
+        pdf.setFillColor(color[0], color[1], color[2])
+        pdf.rect(ml, y, cw, 7, 'F')
+        pdf.setTextColor(255, 255, 255)
+        pdf.setFontSize(9)
+        pdf.setFont('helvetica', 'bold')
+        pdf.text(text.toUpperCase(), ml + 3, y + 5)
+        pdf.setTextColor(20)
+        y += 10
       }
+
+      const numStyleSm = { halign: 'right' as const, cellWidth: 18, fontSize: 8 }
+
+      // ----- HEADER -----
+      pdf.setFontSize(14)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('CONDOMINIO VISTA DEL GOLF - TORRE 4', pw / 2, y, { align: 'center' })
+      y += 6
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setTextColor(71, 85, 105)
+      pdf.text(`INFORME MENSUAL - ${monthName.toUpperCase()}`, pw / 2, y, { align: 'center' })
+      pdf.setTextColor(20)
+      y += 10
+
+      // ----- 1. RESUMEN -----
+      title('RESUMEN', [37, 99, 235])
+      const resumenBody = [
+        ['Saldo Total Disponible', `$${fmt(saldoTotal)}`],
+        ['Ingresos del Mes (Cuotas cobradas)', `$${fmt(totalIngresos)}`],
+        ['Gastos del Mes', `$${fmt(totalGastos)}`],
+        ['Por cobrar (Pendiente)', `$${fmt(totalPendiente)}`],
+        ['% Cobrado', `${pagoRate.toFixed(0)}%`],
+        ['Apartamentos al Día', `${aptosAlDia} / ${ingresos.length}`],
+      ]
+      autoTable(pdf, {
+        startY: y,
+        margin: { left: ml, right: mr },
+        tableLineWidth: 0.5,
+        tableLineColor: 200,
+        head: [['Concepto', 'Valor ($)']],
+        body: resumenBody,
+        theme: 'plain',
+        styles: { fontSize: 9, cellPadding: 2.5 },
+        columns: [
+          { header: 'Concepto', dataKey: '0' },
+          { header: 'Valor ($)', dataKey: '1' },
+        ],
+        columnStyles: {
+          0: { cellWidth: cw - 35 },
+          1: { halign: 'right', cellWidth: 35, fontSize: 9, fontStyle: 'bold' },
+        },
+        headStyles: { fillColor: [241, 245, 249], textColor: 30, fontSize: 9, fontStyle: 'bold', halign: 'left' },
+      })
+      y = (pdf as any).lastAutoTable.finalY + 8
+
+      // ----- 2. INGRESOS -----
+      title('INGRESOS - CUOTAS DE MANTENIMIENTO', [37, 99, 235])
+      const ingBody = ingresos.map(i => {
+        const sa = i.saldo_anterior + i.mensualidad - i.pago
+        return [
+          i.apartamento,
+          i.nombre,
+          `$${fmt(i.saldo_anterior)}`,
+          `$${fmt(i.mensualidad)}`,
+          `$${fmt(i.pago)}`,
+          `$${fmt(sa)}`,
+        ]
+      })
+      const ingTotal = ingresos.reduce((s, i) => s + i.saldo_anterior + i.mensualidad - i.pago, 0)
+      ingBody.push(['', 'TOTAL', `$${fmt(ingresos.reduce((s, i) => s + i.saldo_anterior, 0))}`, `$${fmt(totalMensualidad)}`, `$${fmt(totalIngresos)}`, `$${fmt(ingTotal)}`])
+      autoTable(pdf, {
+        startY: y,
+        margin: { left: ml, right: mr },
+        head: [['Apto', 'Nombre', 'Saldo Ant.', 'Mensualidad', 'Pagó', 'Saldo Actual']],
+        body: ingBody,
+        theme: 'plain',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [241, 245, 249], textColor: 30, fontSize: 8, fontStyle: 'bold' },
+        columnStyles: {
+          0: { cellWidth: 14, halign: 'center' },
+          1: { cellWidth: 50 },
+          2: numStyleSm,
+          3: numStyleSm,
+          4: numStyleSm,
+          5: numStyleSm,
+        },
+        footStyles: { fontStyle: 'bold', fillColor: [248, 250, 252] },
+      })
+      y = (pdf as any).lastAutoTable.finalY + 8
+
+      // ----- 3. GASTOS -----
+      title('GASTOS', [37, 99, 235])
+      const gastosBody = gastos.length === 0
+        ? [['Sin gastos registrados', '', '', '', '']]
+        : gastos.map(g => [
+            new Date(g.fecha).toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+            g.descripcion + (g.detalle_cheque ? ` (${g.detalle_cheque})` : ''),
+            g.efectivo > 0 ? `$${fmt(g.efectivo)}` : '',
+            g.cheques > 0 ? `$${fmt(g.cheques)}` : '',
+            `$${fmt(g.efectivo + g.cheques)}`,
+          ])
+      gastosBody.push(['', 'TOTAL GASTOS', `$${fmt(totalEfectivo)}`, `$${fmt(totalCheques)}`, `$${fmt(totalGastos)}`])
+      autoTable(pdf, {
+        startY: y,
+        margin: { left: ml, right: mr },
+        head: [['Fecha', 'Descripción', 'Efectivo ($)', 'Cheques ($)', 'Total ($)']],
+        body: gastosBody,
+        theme: 'plain',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [241, 245, 249], textColor: 30, fontSize: 8, fontStyle: 'bold' },
+        columnStyles: {
+          0: { cellWidth: 22, halign: 'center' },
+          1: { cellWidth: cw - 22 - 22 - 22 - 22 },
+          2: numStyleSm,
+          3: numStyleSm,
+          4: numStyleSm,
+        },
+      })
+      y = (pdf as any).lastAutoTable.finalY + 8
+
+      // ----- 4. BANCO GENERAL -----
+      title('BANCO GENERAL', [37, 99, 235])
+      const bMovRows = [...bancoMovimientos].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
+      let bRunning = resumen?.banco_saldo_anterior ?? 0
+      const bancoBody: string[][] = [['SALDO ANTERIOR BANCO GENERAL', '', '', `$${fmt(bRunning)}`]]
+      if (totalIngresos > 0) {
+        bRunning += totalIngresos
+        bancoBody.push([`Cobro de Cuotas de Mantenimiento (${ingresos.filter(i => i.pago > 0).length} aptos)`, `$${fmt(totalIngresos)}`, '', `$${fmt(bRunning)}`])
+      }
+      for (const g of gastos.filter(g => g.cheques > 0)) {
+        bRunning -= g.cheques
+        bancoBody.push([g.descripcion + (g.detalle_cheque ? ` (${g.detalle_cheque})` : ''), '', `$${fmt(g.cheques)}`, `$${fmt(bRunning)}`])
+      }
+      for (const m of bMovRows) {
+        bRunning += m.monto
+        bancoBody.push([`${m.descripcion} (Pagado directo por Banco)`, m.monto >= 0 ? `$${fmt(m.monto)}` : '', m.monto < 0 ? `$${fmt(Math.abs(m.monto))}` : '', `$${fmt(bRunning)}`])
+      }
+      autoTable(pdf, {
+        startY: y,
+        margin: { left: ml, right: mr },
+        head: [['Descripción', 'Débito ($)', 'Crédito ($)', 'Saldo ($)']],
+        body: bancoBody,
+        theme: 'plain',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [241, 245, 249], textColor: 30, fontSize: 8, fontStyle: 'bold' },
+        columnStyles: {
+          0: { cellWidth: cw - 22 - 22 - 22 },
+          1: numStyleSm,
+          2: numStyleSm,
+          3: numStyleSm,
+        },
+      })
+      y = (pdf as any).lastAutoTable.finalY + 8
+
+      // ----- 5. CAJA MENUDA -----
+      title('CAJA MENUDA', [37, 99, 235])
+      const cMovRows = [...cajaMovimientos].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
+      let cRunning = resumen?.caja_saldo_anterior ?? 0
+      const cajaBody: string[][] = [['SALDO INICIAL CAJA MENUDA', '', '', `$${fmt(cRunning)}`]]
+      for (const m of cMovRows) {
+        cRunning += m.monto
+        cajaBody.push([`Ingreso a Caja Menuda (${m.descripcion})`, `$${fmt(m.monto)}`, '', `$${fmt(cRunning)}`])
+      }
+      if (totalEfectivo > 0) {
+        cRunning -= totalEfectivo
+        cajaBody.push([`Gastos Varios en Efectivo (${gastos.filter(g => g.efectivo > 0).length} recibos)`, '', `$${fmt(totalEfectivo)}`, `$${fmt(cRunning)}`])
+      }
+      autoTable(pdf, {
+        startY: y,
+        margin: { left: ml, right: mr },
+        head: [['Descripción', 'Débito ($)', 'Crédito ($)', 'Saldo ($)']],
+        body: cajaBody,
+        theme: 'plain',
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [241, 245, 249], textColor: 30, fontSize: 8, fontStyle: 'bold' },
+        columnStyles: {
+          0: { cellWidth: cw - 22 - 22 - 22 },
+          1: numStyleSm,
+          2: numStyleSm,
+          3: numStyleSm,
+        },
+      })
+      y = (pdf as any).lastAutoTable.finalY + 8
+
+      // ----- 6. TOTAL CONSOLIDADO -----
+      pdf.setFillColor(79, 70, 229)
+      pdf.rect(ml, y, cw, 7, 'F')
+      pdf.setTextColor(255, 255, 255)
+      pdf.setFontSize(9)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text('TOTAL CONSOLIDADO', ml + 3, y + 5)
+      pdf.setTextColor(20)
+      y += 10
+
+      autoTable(pdf, {
+        startY: y,
+        margin: { left: ml, right: mr },
+        head: [['Concepto', 'Valor ($)']],
+        body: [
+          ['Saldo Banco General', `$${fmt(saldoBanco)}`],
+          ['Saldo Caja Menuda', `$${fmt(saldoCaja)}`],
+          ['TOTAL FONDOS DISPONIBLES', `$${fmt(saldoTotal)}`],
+        ],
+        theme: 'plain',
+        styles: { fontSize: 9, cellPadding: 2.5 },
+        columnStyles: {
+          0: { cellWidth: cw - 35 },
+          1: { halign: 'right', cellWidth: 35, fontSize: 9, fontStyle: 'bold' },
+        },
+        headStyles: { fillColor: [241, 245, 249], textColor: 30, fontSize: 9, fontStyle: 'bold' },
+      })
+      y = (pdf as any).lastAutoTable.finalY + 10
+
+      // ----- FOOTER -----
+      pdf.setFontSize(7)
+      pdf.setTextColor(148, 163, 184)
+      pdf.text(`Informe generado el ${new Date().toLocaleDateString('es', { day: '2-digit', month: 'long', year: 'numeric' })}`, pw / 2, y, { align: 'center' })
+      y += 4
+      pdf.text('Condominio Vista del Golf - Torre 4 | Panamá', pw / 2, y, { align: 'center' })
 
       pdf.save(`informe-${monthName.replace(/\s/g, '-')}.pdf`)
     } catch (err) {
@@ -127,7 +329,7 @@ export function InformeMensualTab() {
         </button>
       </div>
 
-      <div ref={reportRef} className="bg-white text-slate-900">
+      <div className="bg-white text-slate-900">
         <style>{`
           .inf-table { width: 100%; border-collapse: collapse; font-size: 10px; font-family: Arial, sans-serif; }
           .inf-table th { background: #f1f5f9; padding: 6px 8px; text-align: left; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
